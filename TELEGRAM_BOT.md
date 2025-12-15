@@ -48,7 +48,7 @@ Bot de Telegram que permite actualizar la base de datos de Pika Snacks mediante 
 ```
 Pika_backend/
 ├── docker-compose.yml          # Solo PostgreSQL + red compartida
-├── docker-compose.bot.yml      # Solo Bot de Telegram (independiente)
+├── docker-compose.bot.yml      # Bot + Nginx + Certbot (independiente)
 ├── bot/
 │   ├── __init__.py
 │   ├── main.py                 # Entry point FastAPI
@@ -57,7 +57,15 @@ Pika_backend/
 │   ├── openai_handler.py       # Integración con OpenAI
 │   ├── db.py                   # Conexión a PostgreSQL
 │   ├── telegram_client.py      # Cliente para enviar mensajes
-│   └── Dockerfile              # Dockerfile del bot
+│   ├── Dockerfile              # Dockerfile del bot
+│   ├── nginx/
+│   │   ├── nginx.conf          # Configuración Nginx con SSL
+│   │   └── nginx-init.conf     # Configuración inicial (sin SSL)
+│   └── scripts/
+│       └── init-ssl.sh         # Script para configurar SSL
+├── certbot/                    # Certificados SSL (auto-generado)
+│   ├── conf/                   # Configuración Let's Encrypt
+│   └── www/                    # Challenge ACME
 ├── .env                        # Variables de entorno (NO commitear)
 └── requirements.txt            # Dependencias actualizadas
 ```
@@ -111,15 +119,14 @@ ssh usuario@tu-servidor
 # 2. Ir al directorio del proyecto
 cd /ruta/a/Pika_backend
 
-# 3. Actualizar código
-git pull origin main
-
-# 4. Reconstruir y levantar servicios
-docker-compose down
-docker-compose up -d --build
-
-# 5. Verificar logs
-docker-compose logs -f bot
+# 1. Levantar BD primero (crea la red)
+docker-compose up -d
+# 2. Levantar bot después (usa la red existente)
+docker-compose -f docker-compose.bot.yml up -d --build
+# Reiniciar solo el bot (BD no se toca)
+docker-compose -f docker-compose.bot.yml restart
+# Ver logs del bot
+docker-compose -f docker-compose.bot.yml logs -f
 ```
 
 ### Paso 4: Registrar el Webhook
@@ -343,26 +350,74 @@ docker-compose down
 
 ---
 
-## Requisitos de Red/Servidor
+## Configuración SSL (HTTPS)
 
-### Opción A: Dominio con HTTPS (Recomendado)
-- Dominio apuntando al servidor
-- Certificado SSL (Let's Encrypt gratuito)
-- Puerto 443 abierto
+El SSL está integrado en el docker-compose del bot usando Nginx + Let's Encrypt.
 
-```bash
-# Instalar certbot
-sudo apt install certbot
-sudo certbot certonly --standalone -d tu-dominio.com
+### Arquitectura
+
+```
+Internet (HTTPS:443)
+        │
+        ▼
+┌───────────────┐
+│     Nginx     │ ← SSL termination
+│   (puerto 443)│
+└───────┬───────┘
+        │ HTTP interno
+        ▼
+┌───────────────┐
+│      Bot      │
+│  (puerto 8080)│
+└───────────────┘
 ```
 
-### Opción B: Ngrok (Desarrollo/Pruebas)
+### Paso 1: Configurar DNS
+
+Apuntar tu dominio al servidor:
+```
+bot.tudominio.com  →  IP_DEL_SERVIDOR
+```
+
+### Paso 2: Inicializar SSL
+
 ```bash
-# Instalar ngrok
+# En el servidor, ir al directorio del proyecto
+cd /ruta/a/Pika_backend
+
+# Dar permisos al script
+chmod +x bot/scripts/init-ssl.sh
+
+# Ejecutar (reemplazar con tu dominio y email)
+./bot/scripts/init-ssl.sh bot.tudominio.com tu-email@ejemplo.com
+```
+
+El script automáticamente:
+1. Inicia Nginx en modo HTTP
+2. Obtiene certificado de Let's Encrypt
+3. Configura Nginx con SSL
+4. Reinicia con HTTPS habilitado
+
+### Paso 3: Verificar
+
+```bash
+# Verificar que HTTPS funciona
+curl https://bot.tudominio.com/health
+
+# Debería responder: {"status": "ok", "service": "pika-telegram-bot"}
+```
+
+### Renovación Automática
+
+El contenedor `certbot` renueva automáticamente los certificados cada 12 horas (si están próximos a expirar).
+
+### Alternativa: Ngrok (Desarrollo/Pruebas)
+
+```bash
+# Sin SSL propio, usar ngrok
 ngrok http 8080
 
-# Usar la URL generada para el webhook
-# https://xxxx-xx-xx-xx-xx.ngrok.io/telegram/webhook
+# Usar la URL generada: https://abc123.ngrok.io/telegram/webhook
 ```
 
 ---
@@ -372,8 +427,11 @@ ngrok http 8080
 - [ ] Crear bot con @BotFather y obtener TOKEN
 - [ ] Configurar `.env` con todas las variables
 - [ ] Subir código al servidor (git push)
-- [ ] Ejecutar `docker-compose up -d --build`
-- [ ] Configurar HTTPS (certificado SSL)
+- [ ] Levantar BD: `docker-compose up -d`
+- [ ] Levantar bot: `docker-compose -f docker-compose.bot.yml up -d --build`
+- [ ] Configurar DNS (dominio → IP servidor)
+- [ ] Ejecutar script SSL: `./bot/scripts/init-ssl.sh dominio email`
+- [ ] Verificar HTTPS: `curl https://dominio/health`
 - [ ] Registrar webhook con Telegram API
 - [ ] Verificar webhook: `getWebhookInfo`
 - [ ] Probar enviando mensaje al bot

@@ -17,12 +17,39 @@ services:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_SECRET_TOKEN=${TELEGRAM_SECRET_TOKEN}
       - TELEGRAM_ALLOWED_USERS=${TELEGRAM_ALLOWED_USERS}
-    ports:
-      - "8080:8080"
+    expose:
+      - "8080"
     networks:
       - pika_network
+      - bot_internal
+
+  nginx:
+    image: nginx:alpine
+    container_name: pika_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./bot/nginx/nginx-init.conf:/etc/nginx/nginx.conf:ro
+      - ./certbot/conf:/etc/letsencrypt:ro
+      - ./certbot/www:/var/www/certbot:ro
+    depends_on:
+      - bot
+    networks:
+      - bot_internal
+
+  certbot:
+    image: certbot/certbot
+    container_name: pika_certbot
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
 
 networks:
   pika_network:
     external: true
     name: pika_network
+  bot_internal:
+    driver: bridge
