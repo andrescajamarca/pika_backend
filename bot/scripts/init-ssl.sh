@@ -12,7 +12,18 @@ if [ -z "$DOMAIN" ] || [ -z "$EMAIL" ]; then
     exit 1
 fi
 
+# Detectar comando docker compose (nuevo) o docker-compose (legacy)
+if command -v docker-compose &> /dev/null; then
+    DOCKER_COMPOSE="docker-compose"
+elif docker compose version &> /dev/null; then
+    DOCKER_COMPOSE="docker compose"
+else
+    echo "Error: No se encontró docker-compose ni docker compose"
+    exit 1
+fi
+
 echo "=== Inicializando SSL para $DOMAIN ==="
+echo "Usando: $DOCKER_COMPOSE"
 
 # Crear directorios necesarios
 mkdir -p ./certbot/conf
@@ -20,14 +31,14 @@ mkdir -p ./certbot/www
 
 # 1. Iniciar nginx con configuración básica (sin SSL)
 echo "1. Iniciando Nginx en modo inicial..."
-docker-compose -f docker-compose.bot.yml up -d nginx
+$DOCKER_COMPOSE -f docker-compose.bot.yml up -d nginx
 
 # Esperar a que nginx esté listo
 sleep 5
 
 # 2. Obtener certificado con certbot
 echo "2. Obteniendo certificado SSL..."
-docker-compose -f docker-compose.bot.yml run --rm certbot certonly \
+$DOCKER_COMPOSE -f docker-compose.bot.yml run --rm certbot certonly \
     --webroot \
     --webroot-path=/var/www/certbot \
     --email $EMAIL \
@@ -38,7 +49,7 @@ docker-compose -f docker-compose.bot.yml run --rm certbot certonly \
 
 # 3. Crear enlace simbólico con nombre genérico
 echo "3. Configurando certificados..."
-docker-compose -f docker-compose.bot.yml exec nginx sh -c "
+$DOCKER_COMPOSE -f docker-compose.bot.yml exec nginx sh -c "
     mkdir -p /etc/letsencrypt/live/pika && \
     ln -sf /etc/letsencrypt/live/$DOMAIN/fullchain.pem /etc/letsencrypt/live/pika/fullchain.pem && \
     ln -sf /etc/letsencrypt/live/$DOMAIN/privkey.pem /etc/letsencrypt/live/pika/privkey.pem
@@ -46,11 +57,11 @@ docker-compose -f docker-compose.bot.yml exec nginx sh -c "
 
 # 4. Copiar configuración final de nginx
 echo "4. Aplicando configuración SSL..."
-docker-compose -f docker-compose.bot.yml cp bot/nginx/nginx.conf nginx:/etc/nginx/nginx.conf
+$DOCKER_COMPOSE -f docker-compose.bot.yml cp bot/nginx/nginx.conf nginx:/etc/nginx/nginx.conf
 
 # 5. Reiniciar nginx con SSL
 echo "5. Reiniciando Nginx con SSL..."
-docker-compose -f docker-compose.bot.yml restart nginx
+$DOCKER_COMPOSE -f docker-compose.bot.yml restart nginx
 
 echo ""
 echo "=== SSL configurado correctamente ==="
