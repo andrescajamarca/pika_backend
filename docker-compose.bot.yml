@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  bot:
+    build:
+      context: .
+      dockerfile: bot/Dockerfile
+    container_name: pika_telegram_bot
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-pika_user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-pika_secret_2024}
+      - POSTGRES_DB=${POSTGRES_DB:-pika_db}
+      - POSTGRES_HOST=${POSTGRES_HOST:-pika_db}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_SECRET_TOKEN=${TELEGRAM_SECRET_TOKEN}
+      - TELEGRAM_ALLOWED_USERS=${TELEGRAM_ALLOWED_USERS}
+    ports:
+      - "8080:8080"
+    networks:
+      - pika_network
+
+networks:
+  pika_network:
+    external: true
+    name: pika_network

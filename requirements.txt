@@ -1,0 +1,14 @@
+pandas
+python-dotenv
+openai
+google-api-python-client
+
+google-auth-httplib2
+google-auth-oauthlib
+psycopg2-binary
+
+# Telegram Bot
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+asyncpg>=0.29.0
+httpx>=0.25.0
